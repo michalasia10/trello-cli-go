@@ -50,6 +50,9 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, _ = m.data.Update(msg)
 
 	}
+	if m.data.fetchComplete {
+
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -116,7 +119,7 @@ func (m *Board) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, board, m.help.View(handlers.Keys))
 }
 
-func (m *Board) InitLists() {
+func (m *Board) createBoard(board api.FinalBoard) {
 	m.cols = []Column{
 		NewColumn(Todo),
 		NewColumn(InProgress),

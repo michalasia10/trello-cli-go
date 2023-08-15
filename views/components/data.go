@@ -8,12 +8,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"trello-cli-go/api"
+	"trello-cli-go/handlers"
 )
 
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
 type item struct {
-	title, desc string
+	title, desc, id string
 }
 
 func (i item) Title() string       { return i.title }
@@ -58,7 +59,8 @@ type DataBoard struct {
 	help          help.Model
 	err           error
 	fetchComplete bool
-	finalBoard    []api.FinalBoard
+	fetching      bool
+	FinalBoard    api.FinalBoard
 	BoardsToPick  []api.Board
 	pickedBoard   api.Board
 	apiClient     api.TrelloClient
@@ -77,6 +79,7 @@ func InitialDataBoard(configuredApiClient *api.TrelloClient) DataBoard {
 		err:           nil,
 		fetchComplete: false,
 		showSpinner:   true,
+		fetching:      false,
 		apiClient:     *configuredApiClient,
 	}
 }
@@ -90,7 +93,7 @@ func (d *DataBoard) Init() tea.Cmd {
 	d.BoardsToPick = boards
 	var listRows []list.Item
 	for _, board := range d.BoardsToPick {
-		listRows = append(listRows, item{title: board.Name})
+		listRows = append(listRows, item{title: board.Name, id: board.Id})
 	}
 
 	d.options = modelList{list: list.New(listRows, list.NewDefaultDelegate(), 100, 10)}
@@ -107,6 +110,19 @@ func (d *DataBoard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, tea.Quit
 		case tea.KeyEnter:
 			d.fetchComplete = true
+			selectedItem := d.options.list.SelectedItem()
+			if sI, ok := selectedItem.(item); ok {
+				for _, board := range d.BoardsToPick {
+					if board.Id == sI.id {
+						d.pickedBoard = board
+						b := handlers.NewBoardDataBuilder(d.apiClient)
+						d.FinalBoard, _ = b.BuildBoardData(board.ShortLink)
+						d.fetchComplete = true
+						return d, tea.Quit
+					}
+				}
+			}
+
 			return d, tea.Quit
 		}
 	case tea.WindowSizeMsg:
@@ -131,6 +147,5 @@ func (d *DataBoard) View() string {
 	if len(d.BoardsToPick) <= 0 {
 		return fmt.Sprintf("\n\n   %s Loading forever...press q to quit\n\n", d.spinnerModel.View())
 	}
-
 	return d.options.View()
 }
