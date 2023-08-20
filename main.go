@@ -18,7 +18,6 @@ func main() {
 
 	apiClient := api.NewTrelloClient()
 	components.Bboard = components.NewBoard(apiClient)
-	components.Bboard.InitLists()
 	p := tea.NewProgram(components.Bboard)
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)

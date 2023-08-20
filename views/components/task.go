@@ -4,18 +4,11 @@ type Task struct {
 	Status      Status
 	title       string
 	description string
+	id          string
 }
 
-func NewTask(status Status, title, description string) Task {
-	return Task{Status: status, title: title, description: description}
-}
-
-func (t *Task) Next() {
-	if t.Status == Done {
-		t.Status = Todo
-	} else {
-		t.Status++
-	}
+func NewTask(status Status, title, description string, id string) Task {
+	return Task{Status: status, title: title, description: description, id: id}
 }
 
 // implement the list.Item interface

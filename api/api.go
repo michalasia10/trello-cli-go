@@ -50,6 +50,9 @@ type TrelloClient struct {
 	apiKey   string
 	apiToken string
 }
+type NextList struct {
+	idList string
+}
 
 func NewTrelloClient() *TrelloClient {
 	return &TrelloClient{
@@ -65,7 +68,7 @@ func (t TrelloClient) getR(url string, responseStruct interface{}) (int, error) 
 	}
 	formattedUrl := fmt.Sprintf("%s%s", t.baseurl, url)
 
-	req, err := http.NewRequest("GET", formattedUrl, nil)
+	req, err := http.NewRequest(http.MethodGet, formattedUrl, nil)
 	if err != nil {
 		fmt.Println("Error creating request:", err)
 		return http.StatusBadRequest, err
@@ -102,6 +105,37 @@ func (t TrelloClient) postR(url string, payload []byte) (int, error) {
 	defer response.Body.Close()
 	return response.StatusCode, nil
 }
+func (t TrelloClient) putR(url string, payload []byte) (int, error) {
+	query := map[string]string{
+		"key":   t.apiKey,
+		"token": t.apiToken,
+	}
+	formattedUrl := fmt.Sprintf("%s%s", t.baseurl, url)
+
+	req, err := http.NewRequest(http.MethodPut, formattedUrl, bytes.NewBuffer(payload))
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return http.StatusBadRequest, err
+	}
+	q := req.URL.Query()
+	for key, value := range query {
+		q.Add(key, value)
+	}
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+
+	response, err := client.Do(req)
+	if err != nil {
+		return response.StatusCode, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return response.StatusCode, fmt.Errorf("PUT request failed with status: %d", response.StatusCode)
+	}
+
+	return response.StatusCode, nil
+}
 
 func (t TrelloClient) GetMemberBoards() ([]Board, error) {
 	var boards []Board
@@ -133,4 +167,17 @@ func (t TrelloClient) GetBoardColumns(boardShortLink string) ([]Column, error) {
 		return nil, err
 	}
 	return columns, nil
+}
+
+func (t TrelloClient) MoveCard(cardId string, newListId string) error {
+	nextList := NextList{idList: newListId}
+	payload, err := json.Marshal(nextList)
+	if err != nil {
+		return err
+	}
+	_, err = t.putR(fmt.Sprintf("cards/%s", cardId), payload)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -5,17 +5,22 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"trello-cli-go/api"
 	"trello-cli-go/handlers"
 )
 
 const APPEND = -1
 
 type Column struct {
-	focus  bool
-	Status Status
-	List   list.Model
-	height int
-	width  int
+	focus          bool
+	Status         Status
+	List           list.Model
+	height         int
+	width          int
+	maxColumns     int
+	apiClient      api.TrelloClient
+	id             string
+	AllowedColumns map[int]string
 }
 
 func (c *Column) Focus() {
@@ -30,14 +35,11 @@ func (c *Column) Focused() bool {
 	return c.focus
 }
 
-func NewColumn(status Status) Column {
+func NewColumn(status Status, maxColumns int, id string, client api.TrelloClient, allowedColumns map[int]string) Column {
 	var focus bool
-	if status == Todo {
-		focus = true
-	}
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 	defaultList.SetShowHelp(false)
-	return Column{focus: focus, Status: status, List: defaultList}
+	return Column{focus: focus, Status: status, apiClient: client, id: id, List: defaultList, maxColumns: maxColumns, AllowedColumns: allowedColumns}
 }
 
 // Init does initial setup for the column.
@@ -131,7 +133,16 @@ func (c *Column) MoveToNext() tea.Cmd {
 	}
 	// move item
 	c.List.RemoveItem(c.List.Index())
-	task.Status = c.Status.GetNext()
+	nextStatus := c.Status.GetNext(c.maxColumns)
+	nextColumnId := c.AllowedColumns[int(nextStatus)]
+
+	// send update to trello
+	err := c.apiClient.MoveCard(task.id, nextColumnId)
+	if err != nil {
+		return nil
+	}
+
+	task.Status = nextStatus
 
 	// refresh list
 	var cmd tea.Cmd

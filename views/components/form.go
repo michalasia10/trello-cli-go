@@ -37,7 +37,7 @@ func NewForm(title, description string) *Form {
 }
 
 func (f Form) CreateTask() Task {
-	return Task{Status: f.Col.Status, title: f.title.Value(), description: f.description.Value()}
+	return NewTask(f.Col.Status, f.title.View(), f.description.Value(), "")
 }
 
 func (f Form) Init() tea.Cmd {

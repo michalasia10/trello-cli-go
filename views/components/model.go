@@ -11,20 +11,21 @@ import (
 )
 
 type Board struct {
-	help      help.Model
-	loaded    bool
-	focused   Status
-	cols      []Column
-	quitting  bool
-	login     Login
-	data      DataBoard
-	apiClient api.TrelloClient
+	help          help.Model
+	loaded        bool
+	buildComplete bool
+	focused       Status
+	cols          []Column
+	quitting      bool
+	login         Login
+	data          DataBoard
+	apiClient     api.TrelloClient
 }
 
 func NewBoard(configuredApiClient *api.TrelloClient) *Board {
 	help := help.New()
 	help.ShowAll = true
-	return &Board{help: help, focused: Todo, apiClient: *configuredApiClient}
+	return &Board{help: help, focused: Todo, buildComplete: false, apiClient: *configuredApiClient}
 }
 
 func (m *Board) Init() tea.Cmd {
@@ -38,7 +39,7 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	//	m.login.Init()
 	//	loginModel, _ := m.login.Update(msg)
 	//	m.login = loginModel.(Login)
-	//}
+	//} todo: create login panel
 
 	if !m.data.fetchComplete {
 		if m.login.textInput.Value() == msg {
@@ -50,8 +51,14 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, _ = m.data.Update(msg)
 
 	}
-	if m.data.fetchComplete {
-
+	if m.data.fetchComplete && !m.buildComplete {
+		var cmd tea.Cmd
+		m.createBoard(cmd, m.data.FinalBoard)
+		return m, cmd
+	}
+	if !m.buildComplete {
+		var cmd tea.Cmd
+		return m, cmd
 	}
 
 	switch msg := msg.(type) {
@@ -70,7 +77,7 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case Form:
 		return m, m.cols[m.focused].Set(msg.Index, msg.CreateTask())
 	case moveMsg:
-		return m, m.cols[m.focused.GetNext()].Set(APPEND, msg.Task)
+		return m, m.cols[m.focused.GetNext(len(m.cols))].Set(APPEND, msg.Task)
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, handlers.Keys.Quit):
@@ -78,14 +85,15 @@ func (m *Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, handlers.Keys.Left):
 			m.cols[m.focused].Blur()
-			m.focused = m.focused.GetPrev()
+			m.focused = m.focused.GetPrev(len(m.cols))
 			m.cols[m.focused].Focus()
 		case key.Matches(msg, handlers.Keys.Right):
 			m.cols[m.focused].Blur()
-			m.focused = m.focused.GetNext()
+			m.focused = m.focused.GetNext(len(m.cols))
 			m.cols[m.focused].Focus()
 		}
 	}
+
 	res, cmd := m.cols[m.focused].Update(msg)
 	if _, ok := res.(Column); ok {
 		m.cols[m.focused] = res.(Column)
@@ -106,40 +114,43 @@ func (m *Board) View() string {
 	if m.quitting {
 		return ""
 	}
-	if !m.loaded {
-		m.login = InitialModelLogin()
-		return m.login.View()
+	//if !m.loaded {
+	//	m.login = InitialModelLogin()
+	//	return m.login.View()
+	//}
+	views := make([]string, 0)
+	for _, col := range m.cols {
+		views = append(views, col.View())
 	}
 	board := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		m.cols[Todo].View(),
-		m.cols[InProgress].View(),
-		m.cols[Done].View(),
+		views...,
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, board, m.help.View(handlers.Keys))
 }
 
-func (m *Board) createBoard(board api.FinalBoard) {
-	m.cols = []Column{
-		NewColumn(Todo),
-		NewColumn(InProgress),
-		NewColumn(Done),
+func (m *Board) createBoard(cmd tea.Cmd, board api.FinalBoard) {
+	allowedColumns := make(map[int]string)
+	for idx, col := range board.Columns {
+		allowedColumns[idx] = col.ID
 	}
-	// Init To Do
-	m.cols[Todo].List.Title = "To Do"
-	m.cols[Todo].List.SetItems([]list.Item{
-		Task{Status: Todo, title: "buy milk", description: "strawberry milk"},
-		Task{Status: Todo, title: "eat sushi", description: "negitoro roll, miso soup, rice"},
-		Task{Status: Todo, title: "fold laundry", description: "or wear wrinkly t-shirts"},
-	})
-	// Init in progress
-	m.cols[InProgress].List.Title = "In Progress"
-	m.cols[InProgress].List.SetItems([]list.Item{
-		NewTask(InProgress, "write code", "don't worry, it's Go"),
-	})
-	// Init done
-	m.cols[Done].List.Title = "Done"
-	m.cols[Done].List.SetItems([]list.Item{
-		NewTask(Done, "stay cool", "as a cucumber"),
-	})
+	for idx, boardCol := range board.Columns {
+		col := NewColumn(Status(idx), len(board.Columns), boardCol.ID, m.apiClient, allowedColumns)
+		if idx == 0 {
+			// first column always focused
+			col.Focus()
+		}
+		m.cols = append(m.cols, col)
+	}
+	for idxCol, column := range board.Columns {
+		m.cols[idxCol].List.Title = column.Name
+		cards := make([]list.Item, 0)
+		for _, card := range column.Cards {
+			cards = append(cards, list.Item(NewTask(Status(idxCol), card.Name, card.Descriptions, card.ID)))
+		}
+		m.cols[idxCol].List.SetItems(cards)
+	}
+
+	m.buildComplete = true
+	m.Update(cmd)
 }

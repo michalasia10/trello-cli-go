@@ -2,18 +2,21 @@ package components
 
 type Status int
 
-func (s Status) GetNext() Status {
-	if s == Done {
-		return Todo
+func (s Status) GetNext(maxColumns int) Status {
+	newS := s + 1
+	if newS >= Status(maxColumns) {
+		return 0
 	}
-	return s + 1
+	return newS
+
 }
 
-func (s Status) GetPrev() Status {
-	if s == Todo {
-		return Done
+func (s Status) GetPrev(maxColumns int) Status {
+	newS := s - 1
+	if newS < Status(0) {
+		return Status(maxColumns) - 1
 	}
-	return s - 1
+	return newS
 }
 
 const Margin = 4
